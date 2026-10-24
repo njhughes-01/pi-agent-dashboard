@@ -40,6 +40,46 @@ import type { SessionManager } from "./memory-session-manager.js";
 import { systemRenameUpdates, userRenameUpdates } from "./name-provenance.js";
 import { decideResume } from "./session-origin.js";
 
+/** Prompt delivery mode (change: leaf-only-helpers, WO-A 1.3). */
+const PROMPT_MODES = ["steer", "followUp"] as const;
+type PromptMode = (typeof PROMPT_MODES)[number];
+
+/** Returns an error message, or undefined when absent/valid. */
+function validatePromptMode(value: unknown): string | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value !== "string" || !PROMPT_MODES.includes(value as PromptMode))
+    return `mode must be one of: ${PROMPT_MODES.join(", ")}`;
+  return undefined;
+}
+
+/** Spawn capability-scope body limits (change: leaf-only-helpers, WO-A 1.1). */
+const SPAWN_EXCLUDE_TOOLS_MAX_ENTRIES = 32;
+const SPAWN_EXCLUDE_TOOL_MAX_CHARS = 200;
+const SPAWN_NAME_MAX_CHARS = 200;
+
+/** Returns an error message, or undefined when absent/valid. */
+function validateSpawnExcludeTools(value: unknown): string | undefined {
+  if (value === undefined) return undefined;
+  if (!Array.isArray(value)) return "excludeTools must be an array of strings";
+  if (value.length > SPAWN_EXCLUDE_TOOLS_MAX_ENTRIES)
+    return `excludeTools must have at most ${SPAWN_EXCLUDE_TOOLS_MAX_ENTRIES} entries`;
+  for (const entry of value) {
+    if (typeof entry !== "string" || entry.length === 0)
+      return "excludeTools entries must be non-empty strings";
+    if (entry.length > SPAWN_EXCLUDE_TOOL_MAX_CHARS)
+      return `excludeTools entries must be at most ${SPAWN_EXCLUDE_TOOL_MAX_CHARS} chars`;
+  }
+  return undefined;
+}
+
+/** Returns an error message, or undefined when absent/valid. */
+function validateSpawnName(value: unknown): string | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value !== "string" || value.length === 0) return "name must be a non-empty string";
+  if (value.length > SPAWN_NAME_MAX_CHARS) return `name must be at most ${SPAWN_NAME_MAX_CHARS} chars`;
+  return undefined;
+}
+
 export interface SessionApiDeps {
   sessionManager: SessionManager;
   piGateway: PiGateway;
@@ -117,11 +157,11 @@ export function registerSessionApi(fastify: FastifyInstance, deps: SessionApiDep
   // install window is no longer needed.
 
   // POST /api/session/:id/prompt
-  fastify.post<IdParams & { Body: { text?: string; images?: any[] } }>(
+  fastify.post<IdParams & { Body: { text?: string; images?: any[]; mode?: string } }>(
     "/api/session/:id/prompt",
     async (request, reply) => {
       const { id } = request.params;
-      const { text, images } = request.body ?? {};
+      const { text, images, mode } = request.body ?? {};
       // Untrusted input: a bare truthiness check accepted objects and numbers,
       // which then reached the bridge as a `send_prompt.text`.
       // See change: fix-spawn-correlation-ttl-coupling.
@@ -132,6 +172,16 @@ export function registerSessionApi(fastify: FastifyInstance, deps: SessionApiDep
       if (images !== undefined && !Array.isArray(images)) {
         reply.code(400);
         return { success: false, error: "images must be an array" } satisfies ApiResponse;
+      }
+      // WO-A (change: leaf-only-helpers): `mode` selects how pi takes the prompt
+      // (`deliverAs`). It rides the bridge `send_prompt` as `delivery`, the field
+      // the bridge already routes: while streaming, "followUp" (the default, so
+      // today's bridge-buffered queueing is unchanged) buffers in the bridge and
+      // "steer" goes to pi as `{deliverAs:"steer"}`; idle, both go straight to pi.
+      const modeError = validatePromptMode(mode);
+      if (modeError) {
+        reply.code(400);
+        return { success: false, error: modeError } satisfies ApiResponse;
       }
       const result = getSessionOrFail(sessionManager, id);
       if ("error" in result) {
@@ -149,6 +199,7 @@ export function registerSessionApi(fastify: FastifyInstance, deps: SessionApiDep
         text,
         images,
         promptId,
+        delivery: (mode ?? "followUp") as "steer" | "followUp",
       });
       if (!sent) {
         reply.code(502);
@@ -299,10 +350,10 @@ export function registerSessionApi(fastify: FastifyInstance, deps: SessionApiDep
   );
 
   // POST /api/session/spawn
-  fastify.post<{ Body: { cwd?: string; agent?: string } }>(
+  fastify.post<{ Body: { cwd?: string; agent?: string; excludeTools?: string[]; name?: string } }>(
     "/api/session/spawn",
     async (request, reply) => {
-      const { cwd, agent } = request.body ?? {};
+      const { cwd, agent, excludeTools, name } = request.body ?? {};
       if (!cwd) {
         reply.code(400);
         return { success: false, error: "cwd is required" } satisfies ApiResponse;
@@ -312,6 +363,25 @@ export function registerSessionApi(fastify: FastifyInstance, deps: SessionApiDep
       if (acpAgent && !acpAgent.ok) {
         reply.code(400);
         return { success: false, error: acpAgent.message } satisfies ApiResponse;
+      }
+      // WO-A (change: leaf-only-helpers): the caller may narrow the spawned
+      // session's capabilities (`excludeTools`) and title it (`name`). Both are
+      // validated at the HTTP boundary before anything is minted or spawned.
+      const excludeToolsError = validateSpawnExcludeTools(excludeTools);
+      if (excludeToolsError) {
+        reply.code(400);
+        return { success: false, error: excludeToolsError } satisfies ApiResponse;
+      }
+      const nameError = validateSpawnName(name);
+      if (nameError) {
+        reply.code(400);
+        return { success: false, error: nameError } satisfies ApiResponse;
+      }
+      // ACP spawns cannot apply pi-only capability scope; refuse rather than
+      // report a successful spawn that silently dropped the restriction.
+      if (acpAgent?.ok && (excludeTools !== undefined || name !== undefined)) {
+        reply.code(400);
+        return { success: false, error: "excludeTools and name are not supported for ACP agent spawns" } satisfies ApiResponse;
       }
       if (acpAgent?.ok) {
         const preflight = preflightAcpSpawn(cwd, acpAgent.agent);
@@ -340,6 +410,8 @@ export function registerSessionApi(fastify: FastifyInstance, deps: SessionApiDep
           : await spawnPiSession(cwd, {
               strategy: config.spawnStrategy,
               ...(ownerSpawnToken ? { spawnToken: ownerSpawnToken } : {}),
+              ...(excludeTools ? { excludeTools } : {}),
+              ...(name ? { name } : {}),
             });
         // REST spawn has no browser socket; the reclaim must run regardless, or
         // a duplicate refused for contention keeps writing the incumbent's
