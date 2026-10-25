@@ -143,6 +143,18 @@ describe("SPA fallback", () => {
     expect(health.type).toContain("application/json");
   });
 
+  it("non-navigation requests outside /api (unmatched /mcp, PUT /anything) are a JSON 404, never the SPA shell", async () => {
+    for (const [method, p] of [["DELETE", "/mcp/nope"], ["GET", "/mcp/nope"], ["PUT", "/session/abc-123"], ["POST", "/some/unknown/path"]] as const) {
+      const res = await proofFetch(`http://127.0.0.1:${httpPort}${p}`, { method });
+      expect(res.status, `${method} ${p}`).toBe(404);
+      expect(res.headers.get("content-type"), `${method} ${p}`).toContain("application/json");
+      expect(await res.text(), `${method} ${p}`).not.toContain("<html");
+    }
+    const spa = await rawGet(httpPort, "/session/abc-123");
+    expect(spa.status).toBe(200);
+    expect(spa.type).toContain("text/html");
+  });
+
   it("an unmatched /api path is a JSON 404 for every method, and names the path (≤ 200 chars, no query)", async () => {
     const res = await proofFetch(`http://127.0.0.1:${httpPort}/api/nope?token=secret-abc`, { method: "POST" });
     expect(res.status).toBe(404);
