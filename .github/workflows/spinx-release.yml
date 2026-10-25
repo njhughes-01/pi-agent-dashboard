@@ -1,0 +1,152 @@
+# Fork-only release pipeline: builds ONE versioned, checksummed, attested install
+# artifact of the Dashboard global package (+ bridge and five configured plugins).
+# It never runs `npm publish` and never deploys: installation on Spinx is a
+# separate, explicitly approved step (scripts/spinx-release/install-release.sh).
+#
+# Triggers: a non-force annotated tag `spinx-v<base>-spinx.<N>` (e.g.
+# `spinx-v0.10.0-spinx.1`), or a manual dispatch (dry-run by default: build +
+# smoke only, nothing is released). Upstream's publish.yml reacts to `v*` tags
+# only, so these tags cannot trigger it.
+# See change: fork-release-and-local-install, docs/fork-release.md.
+name: Spinx fork release
+
+on:
+  push:
+    tags: ["spinx-v*"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version, e.g. 0.10.0-spinx.1"
+        required: true
+        type: string
+      dry-run:
+        description: "Build and smoke-test only; do not create a release"
+        required: true
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: spinx-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      artifact: ${{ steps.version.outputs.artifact }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Resolve and validate the version
+        id: version
+        env:
+          EVENT: ${{ github.event_name }}
+          REF_NAME: ${{ github.ref_name }}
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT" = "push" ]; then version="${REF_NAME#spinx-v}"; else version="$INPUT_VERSION"; fi
+          if ! printf '%s' "$version" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+-spinx\.[0-9]+$'; then
+            echo "::error::version '$version' must look like 0.10.0-spinx.1"
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "artifact=spinx-pi-dashboard-$version-linux-x64-node24.tar.gz" >> "$GITHUB_OUTPUT"
+
+      - name: Tagged commit must be on the fork's develop
+        if: github.event_name == 'push'
+        run: |
+          set -euo pipefail
+          git merge-base --is-ancestor "$GITHUB_SHA" origin/develop || { echo "::error::tag commit is not reachable from develop"; exit 1; }
+
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          # No dependency cache: release job (see upstream harden-ci-cache-poisoning).
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run build
+
+      - name: Focused release tests
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          export HOME="$RUNNER_TEMP/test-home"
+          mkdir -p "$HOME"
+          pnpm exec vitest run scripts/__tests__/spinx-release-layout.test.mjs scripts/__tests__/spinx-release-tree.test.mjs scripts/__tests__/spinx-release-artifact.test.mjs scripts/__tests__/spinx-release-install.test.mjs scripts/__tests__/spinx-release-verify.test.mjs packages/server/src/__tests__/session-api-spawn-capability-scope.test.ts packages/server/src/__tests__/session-api-prompt-mode.test.ts
+
+      - name: Build the release tree (stamped copy; source is not mutated)
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: node scripts/spinx-release/build-release-tree.mjs --repo . --out "$RUNNER_TEMP/tree" --version "$VERSION"
+
+      - name: Pack the artifact (deterministic tarball, SHA256SUMS, manifest.json, secrets scan)
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: node scripts/spinx-release/make-artifact.mjs --tree "$RUNNER_TEMP/tree" --out "$RUNNER_TEMP/out" --version "$VERSION" --source-sha "$GITHUB_SHA"
+
+      - name: Smoke - install into a throwaway prefix and run the leaf-helper probe
+        env:
+          ARTIFACT: ${{ steps.version.outputs.artifact }}
+        run: |
+          set -euo pipefail
+          export SPINX_GLOBAL_DIR="$RUNNER_TEMP/smoke/global" SPINX_BACKUP_DIR="$RUNNER_TEMP/smoke/backup"
+          mkdir -p "$SPINX_GLOBAL_DIR/pi-agent-dashboard"
+          echo '{"version":"0.0.0"}' > "$SPINX_GLOBAL_DIR/pi-agent-dashboard/package.json"
+          bash scripts/spinx-release/install-release.sh --artifact "$RUNNER_TEMP/out/$ARTIFACT" --sums "$RUNNER_TEMP/out/SHA256SUMS" --manifest "$RUNNER_TEMP/out/manifest.json" --no-restart
+          bash scripts/spinx-release/probe-leaf-helper.sh
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: spinx-release-${{ steps.version.outputs.version }}
+          path: |
+            ${{ runner.temp }}/out/${{ steps.version.outputs.artifact }}
+            ${{ runner.temp }}/out/SHA256SUMS
+            ${{ runner.temp }}/out/manifest.json
+          if-no-files-found: error
+          retention-days: 14
+
+  release:
+    needs: build
+    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && !inputs.dry-run)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: spinx-release-${{ needs.build.outputs.version }}
+          path: dist
+
+      - name: Verify the downloaded checksums
+        run: cd dist && sha256sum -c SHA256SUMS
+
+      - uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: dist/${{ needs.build.outputs.artifact }}
+
+      - name: Create the GitHub prerelease (assets only)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.build.outputs.version }}
+          ARTIFACT: ${{ needs.build.outputs.artifact }}
+          EVENT: ${{ github.event_name }}
+        run: |
+          set -euo pipefail
+          tag="spinx-v$VERSION"
+          if [ "$EVENT" = "workflow_dispatch" ] && ! git ls-remote --exit-code --tags "https://github.com/$GITHUB_REPOSITORY" "refs/tags/$tag" >/dev/null 2>&1; then
+            echo "::error::dispatch release needs an existing tag $tag (push it first); this workflow never moves or force-creates tags"
+            exit 1
+          fi
+          gh release create "$tag" "dist/$ARTIFACT" dist/SHA256SUMS dist/manifest.json --repo "$GITHUB_REPOSITORY" --title "Spinx fork release $VERSION" --notes "Install with scripts/spinx-release/install-release.sh (see docs/fork-release.md). Verify with: gh attestation verify $ARTIFACT --repo $GITHUB_REPOSITORY" --prerelease --verify-tag
