@@ -3717,12 +3717,21 @@ export async function createServer(config: ServerConfig): Promise<DashboardServe
   // Vite proxy hop: Vite proxies `/api` straight back here). The guard's own two path
   // views decide, so an encoded or dotted spelling cannot reach the SPA shell either; an
   // unparseable target gets the same answer. See change: retro-ux-credential-vault (D7).
+  // A request the SPA shell must never answer: an unmatched `/api` path, or any non-navigation request
+  // (a method other than GET/HEAD, or the `/mcp` endpoint). Serving index.html with a 200 there hides a
+  // missing route as an "unexpected content-type: text/html" client error (e.g. POST /mcp when the MCP
+  // plugin is not loaded, or a newer client calling a route this server lacks).
   const replyIfApiNotFound = (request: FastifyRequest, reply: FastifyReply): FastifyReply | undefined => {
     const target = parseGuardTarget(request.url);
     const underApi = (p: string) => p === "/api" || p.startsWith("/api/");
-    if (target && !underApi(target.raw) && !underApi(target.resolved)) return undefined;
+    const underMcp = (p: string) => p === "/mcp" || p.startsWith("/mcp/");
+    const isNavigation = request.method === "GET" || request.method === "HEAD";
+    const apiMiss = !target || underApi(target.raw) || underApi(target.resolved);
+    const mcpMiss = !!target && (underMcp(target.raw) || underMcp(target.resolved));
+    if (!apiMiss && !mcpMiss && isNavigation) return undefined;
     const rawPath = request.url.split(/[?#]/, 1)[0].slice(0, 200);
-    return reply.code(404).send({ success: false, error: "not_found", message: `No API route for ${request.method} ${rawPath}` });
+    const what = apiMiss ? "API route" : "route";
+    return reply.code(404).send({ success: false, error: "not_found", message: `No ${what} for ${request.method} ${rawPath}` });
   };
 
   const indexSender = createIndexHtmlSender(clientDir, { trustedTypesMode });
