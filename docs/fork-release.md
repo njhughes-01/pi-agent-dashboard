@@ -89,3 +89,9 @@ bash scripts/spinx-release/probe-leaf-helper.sh
 
 - `origin` = `BlackBeltTechnology/pi-agent-dashboard`. Fork changes are additive new files.
 - Sync: merge `origin/develop` into a branch off fork `develop`, PR on fork.
+
+## Known limits (reviewed, accepted)
+
+- Rollback is transactional up to the directory swap. After the swap it does NOT undo on a failed health check: the rollback target hash is verified before the swap, and undoing would reinstall the version the operator is leaving. It exits non-zero and says so. Recovery: fix the cause, or run install again.
+- Secret scan inside `node_modules`: names + `ghp_`/`sk-ant-` tokens only. Private-key headers and `AKIA` shapes there are third-party docs/test fixtures (6 false positives in a real 62-package tree). Files > 50 MB (native binaries) are not content-scanned.
+- Second CI build repeats install + packaging, not the web compile (the compiled client is shared by both builds).
