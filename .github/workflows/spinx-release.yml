@@ -73,8 +73,12 @@ jobs:
         run: |
           set -euo pipefail
           tag="spinx-v$VERSION"
-          [ "$(git cat-file -t "refs/tags/$tag")" = tag ] || { echo "::error::$tag must be an annotated tag"; exit 1; }
-          [ "$(git rev-parse "refs/tags/$tag^{commit}")" = "$GITHUB_SHA" ] || { echo "::error::$tag does not point at the built commit $GITHUB_SHA"; exit 1; }
+          # actions/checkout rewrites the tag ref locally as a lightweight tag, so ask the remote:
+          # an annotated tag lists the tag object AND its peeled commit (`^{}`).
+          refs="$(git ls-remote "https://github.com/$GITHUB_REPOSITORY" "refs/tags/$tag" "refs/tags/$tag^{}")"
+          [ "$(printf '%s\n' "$refs" | grep -c .)" = 2 ] || { echo "::error::$tag must be an annotated tag"; exit 1; }
+          peeled="$(printf '%s\n' "$refs" | awk '$2 ~ /\^\{\}$/ { print $1 }')"
+          [ "$peeled" = "$GITHUB_SHA" ] || { echo "::error::$tag does not point at the built commit $GITHUB_SHA"; exit 1; }
 
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
