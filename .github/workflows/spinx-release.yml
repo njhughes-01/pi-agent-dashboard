@@ -60,8 +60,8 @@ jobs:
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "artifact=spinx-pi-dashboard-$version-linux-x64-node24.tar.gz" >> "$GITHUB_OUTPUT"
 
-      - name: Tagged commit must be on the fork's develop
-        if: github.event_name == 'push'
+      - name: Built commit must be on the fork's develop (every publishing run)
+        if: github.event_name == 'push' || !inputs.dry-run
         run: |
           set -euo pipefail
           git merge-base --is-ancestor "$GITHUB_SHA" origin/develop || { echo "::error::tag commit is not reachable from develop"; exit 1; }
