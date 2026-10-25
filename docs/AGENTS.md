@@ -32,6 +32,7 @@ Files in this directory. One row per file. Topic docs + repo-root config (root c
 | `examples/c4-example.md` | C4-model diagram example. Mermaid fenced blocks: `C4Context`, `C4Container`. → see `examples/c4-example.md.AGENTS.md` |
 | `faq.md` | Recurring how-to + troubleshooting Q&A. Caveman style. See change: harden-bridge-inbound-and-discovery. → see `faq.md.AGENTS.md` |
 | `features.md` | Full feature catalog. 562 capabilities. Derived from README.md + openspec/specs/. Categorized by surface. Source for end-user subset → docs/user-features.md. See change: scope-anchor-editor-pane-controls. |
+| `fork-release.md` | Fork release + local install. `spinx-release.yml` builds versioned checksummed attested artifact (no npm publish, no deploy). Install/verify/probe/rollback scripts under `scripts/spinx-release/`. See change: fork-release-and-local-install. |
 | `heap-limits.md` | V8 heap reference. Config keys `sessionHeap` (`maxOldSpaceMb` 512, `initialOldSpaceMb`, `maxSemiSpaceMb`) +… → see `heap-limits.md.AGENTS.md` |
 | `grammar-checker.md` | User + dev feature doc. LLM grammar + spelling + style check for composer + OpenSpec Explore/New Change… Plugin-config partial write keeps omitted keys. See change: fix-plugin-config-partial-write. → see `grammar-checker.md.AGENTS.md` |
 | `grammar-model-guidance.md` | Recommended LLM models for composer grammar check + latency/quality/cost tradeoffs. → see `grammar-model-guidance.md.AGENTS.md` |

@@ -1,0 +1,35 @@
+{
+  "rootPackage": "@blackbelt-technology/pi-agent-dashboard",
+  "topDir": "pi-agent-dashboard",
+  "platform": "linux-x64",
+  "nodeMajor": 24,
+  "overlayPackages": {
+    "extension": "@blackbelt-technology/pi-dashboard-extension",
+    "automation-plugin": "@blackbelt-technology/pi-dashboard-automation-plugin",
+    "flows-plugin": "@blackbelt-technology/pi-dashboard-flows-plugin",
+    "goal-plugin": "@blackbelt-technology/pi-dashboard-goal-plugin",
+    "gmail-plugin": "@blackbelt-technology/pi-dashboard-gmail-plugin",
+    "flows-anthropic-bridge-plugin": "@blackbelt-technology/pi-dashboard-flows-anthropic-bridge-plugin"
+  },
+  "requiredFiles": [
+    "package.json",
+    "node_modules/@blackbelt-technology/pi-dashboard-web/dist/index.html",
+    "packages/server/bin/pi-dashboard.mjs",
+    "packages/server/package.json",
+    "packages/extension/package.json",
+    "packages/extension/src/bridge.ts",
+    "packages/automation-plugin/src/bridge/index.ts",
+    "packages/flows-plugin/src/bridge/index.ts",
+    "packages/goal-plugin/src/bridge/index.ts",
+    "packages/gmail-plugin/src/bridge/index.ts",
+    "packages/flows-anthropic-bridge-plugin/src/bridge/index.ts"
+  ],
+  "forbiddenNames": [
+    ".env",
+    "auth.json",
+    ".credentials.json",
+    "id_rsa",
+    "id_ed25519",
+    ".npmrc"
+  ]
+}
