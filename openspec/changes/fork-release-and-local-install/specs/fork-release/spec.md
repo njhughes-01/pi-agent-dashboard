@@ -26,8 +26,20 @@ Version stamping SHALL happen only in a temporary copy.
 ### Requirement: Artifact is reproducible and secret-free
 Two builds from one input SHALL yield identical tarball hashes, and the packer SHALL fail on credential-shaped files.
 
+#### Scenario: Reproducible hash
+- **WHEN** two independent builds run from the same commit
+- **THEN** their tarball sha256 SHALL be identical
+
+#### Scenario: Planted credential
+- **WHEN** a credential file or token is present in the tree
+- **THEN** the packer SHALL exit non-zero and write nothing
+
 ### Requirement: Installer verifies before acting
 The installer SHALL refuse on checksum mismatch, wrong platform/node ABI, or missing required paths, before stopping the service.
+
+#### Scenario: Checksum mismatch
+- **WHEN** the tarball differs from SHA256SUMS
+- **THEN** the installer SHALL exit non-zero without calling systemctl or changing the install
 
 ### Requirement: Atomic activation with rollback
 Activation SHALL be two same-filesystem renames; any failure after the first rename, or a failed health check, SHALL restore the previous directory byte-for-byte.
@@ -38,3 +50,7 @@ Activation SHALL be two same-filesystem renames; any failure after the first ren
 
 ### Requirement: Scripts never touch auth, settings or config
 Install and rollback SHALL write only the global package directory and the backup directory.
+
+#### Scenario: Only expected paths change
+- **WHEN** install runs against a temp prefix
+- **THEN** only the global dir and backup dir SHALL contain new entries
