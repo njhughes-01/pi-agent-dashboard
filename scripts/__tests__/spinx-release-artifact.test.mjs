@@ -81,6 +81,19 @@ describe("make-artifact", () => {
     }
   });
 
+  it("scans node_modules too: credential files and tokens fail the pack", () => {
+    for (const extra of [{ "node_modules/pkg/.env": "A=1" }, { "node_modules/pkg/id_rsa": "x" }, { "node_modules/pkg/t.js": `sk-ant-${"a".repeat(30)}` }]) {
+      expect(pack(fakeTree(extra), tmp()).status, JSON.stringify(extra)).not.toBe(0);
+    }
+  });
+
+  it("rejects a .bin symlink that escapes into a sibling of the tree", () => {
+    const parent = fakeTree();
+    fs.mkdirSync(path.join(parent, `${manifest.topDir}-other`));
+    fs.symlinkSync("../../../pi-agent-dashboard-other", path.join(parent, manifest.topDir, "node_modules/.bin/escape"));
+    expect(pack(parent, tmp()).status).not.toBe(0);
+  });
+
   it("fails when a required file is missing", () => {
     const parent = fakeTree();
     fs.rmSync(path.join(parent, manifest.topDir, manifest.requiredFiles[2]));

@@ -22,23 +22,28 @@ check() { # check <label> <command...>
   if "$@" >/dev/null 2>&1; then log "PASS $label"; else log "FAIL $label"; FAILS=$((FAILS + 1)); fi
 }
 
+# Each node call runs on its own so a failure is a counted check, not an empty list.
+REQUIRED="$(node -p "require('$HERE/layout-manifest.json').requiredFiles.join('\n')")" || { log "FAIL read layout manifest"; FAILS=$((FAILS + 1)); REQUIRED=""; }
 while IFS= read -r f; do
-  check "required file $f" test -f "$PKG/$f" -a ! -L "$PKG/$f"
-done < <(node -p "require('$HERE/layout-manifest.json').requiredFiles.join('\n')")
+  [ -n "$f" ] && check "required file $f" test -f "$PKG/$f" -a ! -L "$PKG/$f"
+done <<< "$REQUIRED"
 
 if [ -n "$EXPECT" ]; then check "version is $EXPECT" test "$(pkg_version "$PKG")" = "$EXPECT"; fi
-check "health answers JSON" curl -fsS --max-time 5 "$SPINX_HEALTH_URL"
-check "client is served" curl -fsS --max-time 5 -o /dev/null "${SPINX_HEALTH_URL%/api/health}/"
+is_json() { curl -fsS --max-time 5 "$1" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{const j=JSON.parse(s);process.exit(j&&typeof j==="object"?0:1)}catch{process.exit(1)}})'; }
+is_client_html() { curl -fsS --max-time 5 "$1" | grep -qi '<html'; }
+check "health answers a JSON object" is_json "$SPINX_HEALTH_URL"
+check "client HTML is served at /" is_client_html "${SPINX_HEALTH_URL%/api/health}/"
 
 if [ -f "$SPINX_SETTINGS" ]; then
-  while IFS= read -r p; do
-    check "settings path $p" test -e "$p"
-  done < <(node -e '
+  PATHS="$(node -e '
 const s = require(process.argv[1]);
 const g = process.argv[2];
 const all = [...(s.packages || []), ...Object.values(s.dashboardPluginBridges || {}), ...Object.keys(s._dashboardManagedPackages || {})];
 for (const p of new Set(all)) if (typeof p === "string" && p.startsWith(g)) console.log(p);
-' "$SPINX_SETTINGS" "$SPINX_GLOBAL_DIR")
+' "$SPINX_SETTINGS" "$SPINX_GLOBAL_DIR")" || { log "FAIL read settings $SPINX_SETTINGS"; FAILS=$((FAILS + 1)); PATHS=""; }
+  while IFS= read -r p; do
+    [ -n "$p" ] && check "settings path $p" test -e "$p"
+  done <<< "$PATHS"
 fi
 
 if [ "$FAILS" -ne 0 ]; then log "$FAILS check(s) failed"; exit 1; fi

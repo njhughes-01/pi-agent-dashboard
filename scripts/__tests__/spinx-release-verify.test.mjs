@@ -18,7 +18,7 @@ let server;
 let port;
 
 beforeAll(async () => {
-  server = spawn("node", ["-e", 'require("http").createServer((q,r)=>{r.setHeader("content-type","application/json");r.end(q.url==="/api/health"?\'{"status":"ok"}\':"{}")}).listen(0,"127.0.0.1",function(){console.log(this.address().port)})'], { stdio: ["ignore", "pipe", "inherit"] });
+  server = spawn("node", ["-e", 'require("http").createServer((q,r)=>{r.end(q.url==="/api/health"?\'{"status":"ok"}\':"<!doctype html><html></html>")}).listen(0,"127.0.0.1",function(){console.log(this.address().port)})'], { stdio: ["ignore", "pipe", "inherit"] });
   port = await new Promise((resolve) => server.stdout.once("data", (d) => resolve(Number(String(d).trim()))));
 });
 afterAll(() => server.kill());
@@ -55,6 +55,21 @@ describe("verify-install.sh", () => {
     const r = verify(install("1.2.3-spinx.1", { omit: "packages/goal-plugin/src/bridge/index.ts" }));
     expect(r.status).toBe(1);
     expect(r.stdout).toContain("FAIL required file packages/goal-plugin/src/bridge/index.ts");
+  });
+
+  it("fails (not silently passes) when settings.json is unreadable JSON", () => {
+    const i = install("1.2.3-spinx.1");
+    fs.writeFileSync(i.settings, "{ not json");
+    const r = verify(i);
+    expect(r.status).toBe(1);
+    expect(r.stdout).toContain("FAIL read settings");
+  });
+
+  it("fails when health is not a JSON object", () => {
+    const i = install("1.2.3-spinx.1");
+    const r = spawnSync("bash", [path.join(DIR, "verify-install.sh")], { encoding: "utf8", env: { ...process.env, SPINX_GLOBAL_DIR: i.globalDir, SPINX_SETTINGS: i.settings, SPINX_HEALTH_URL: `http://127.0.0.1:${port}/` } });
+    expect(r.status).toBe(1);
+    expect(r.stdout).toContain("FAIL health answers a JSON object");
   });
 
   it("fails on a version mismatch", () => {

@@ -31,7 +31,7 @@ describe("spinx release layout manifest", () => {
   });
 
   it("every required packages/ file exists in the source workspace (or its server bin)", () => {
-    for (const f of manifest.requiredFiles.filter((x) => x.startsWith("packages/"))) {
+    for (const f of manifest.requiredFiles.filter((x) => x.startsWith("packages/") && !x.startsWith("packages/dist/"))) {
       expect(fs.existsSync(path.join(REPO, f)), f).toBe(true);
     }
   });

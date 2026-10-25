@@ -47,9 +47,11 @@ function copyTracked(repo, dest, allowNoDist) {
     fs.mkdirSync(path.dirname(path.join(dest, f)), { recursive: true });
     fs.copyFileSync(src, path.join(dest, f));
   }
-  const dist = path.join(repo, "packages/dist");
-  if (fs.existsSync(dist)) fs.cpSync(dist, path.join(dest, "packages/dist"), { recursive: true, dereference: false });
-  else if (!allowNoDist) throw new Error("packages/dist is missing: run the web build first (or pass --allow-no-dist)");
+  // Build outputs are git-ignored but shipped by the packages' `files` (e.g. packages/client/dist).
+  const ignored = run("git", ["-C", repo, "ls-files", "-o", "-i", "--exclude-standard", "--directory", "-z"]).split("\0");
+  const distDirs = ignored.filter((d) => /^packages\/(?:[^/]+\/)?dist\/$/.test(d));
+  for (const d of distDirs) fs.cpSync(path.join(repo, d), path.join(dest, d), { recursive: true, dereference: false });
+  if (!allowNoDist && !fs.existsSync(path.join(dest, "packages/client/dist/index.html"))) throw new Error("packages/client/dist is missing: run the web build first (or pass --allow-no-dist)");
 }
 
 function listPackageJsons(dir) {
@@ -128,7 +130,8 @@ function main() {
         run("node", ["scripts/fix-pty-permissions.cjs"], { cwd: tree });
       }
     }
-    for (const f of manifest.requiredFiles) if (!fs.lstatSync(path.join(tree, f), { throwIfNoEntry: false })?.isFile()) throw new Error(`required file missing from tree: ${f}`);
+    const skipInstalled = a.flags.has("skip-install");
+    for (const f of manifest.requiredFiles.filter((x) => !(skipInstalled && x.startsWith("node_modules/")))) if (!fs.lstatSync(path.join(tree, f), { throwIfNoEntry: false })?.isFile()) throw new Error(`required file missing from tree: ${f}`);
     console.log(JSON.stringify({ tree, version: a.version, packages: Object.keys(packed).length }));
   } finally {
     fs.rmSync(work, { recursive: true, force: true });

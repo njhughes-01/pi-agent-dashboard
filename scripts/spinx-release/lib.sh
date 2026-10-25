@@ -34,3 +34,10 @@ tree_hash() {
     if [ -L "$f" ]; then printf 'L %s %s\n' "$f" "$(readlink "$f")"; else printf 'F %s %s\n' "$f" "$(sha256sum "$f" | cut -d' ' -f1)"; fi
   done | sha256sum | cut -d' ' -f1)
 }
+
+# acquire_lock: one install/rollback at a time (shared by both scripts).
+acquire_lock() {
+  mkdir -p "$SPINX_BACKUP_DIR"
+  exec 9>"$SPINX_BACKUP_DIR/.lock"
+  flock -n 9 || die "another install/rollback is running (lock: $SPINX_BACKUP_DIR/.lock)"
+}

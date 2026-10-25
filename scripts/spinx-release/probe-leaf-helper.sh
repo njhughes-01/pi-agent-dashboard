@@ -15,6 +15,8 @@ set -uo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=lib.sh
 . "$HERE/lib.sh"
+# Agent-directory/port overrides inherited from the caller would defeat the throwaway HOME.
+for v in $(env | cut -d= -f1 | grep -E '^(PI_DASHBOARD_|PI_CODING_AGENT_)' || true); do unset "$v"; done
 PORT=18700
 if [ "${1:-}" = "--port" ]; then PORT="${2:?--port needs a value}"; fi
 PKG="$SPINX_GLOBAL_DIR/$PKG_NAME"
@@ -39,6 +41,8 @@ CLI=(node --import "$NL" "$PKG/packages/server/src/cli.ts")
 HOME="$H" "${CLI[@]}" --port "$PORT" --pi-port "$((PORT + 1))" --no-tunnel >"$WORK/server.log" 2>&1 &
 PIDS+=("$!")
 SPINX_HEALTH_URL="http://127.0.0.1:$PORT/api/health" SPINX_HEALTH_TIMEOUT=90 wait_healthy || { tail -5 "$WORK/server.log" >&2; die "ephemeral instance did not become healthy"; }
+
+if curl -fsS --max-time 5 "http://127.0.0.1:$PORT/" | grep -qi '<html'; then check ok "client HTML is served at /"; else check fail "client HTML is not served at /"; fi
 
 BODY="{\"cwd\":\"$WORK\",\"excludeTools\":[\"Agent\",\"agent_*\",\"workflow_*\"],\"name\":\"leaf-probe\"}"
 RESP="$(HOME="$H" "${CLI[@]}" api POST /api/session/spawn --port "$PORT" --data "$BODY" 2>&1)"

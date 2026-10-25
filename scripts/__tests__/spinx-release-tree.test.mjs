@@ -46,7 +46,7 @@ describe("build-release-tree", () => {
   });
 
   it("contains every required file as a regular file", () => {
-    for (const f of manifest.requiredFiles) {
+    for (const f of manifest.requiredFiles.filter((x) => !x.startsWith("node_modules/"))) {
       const st = fs.lstatSync(path.join(tree, f));
       expect(st.isFile(), f).toBe(true);
     }

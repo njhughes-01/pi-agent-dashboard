@@ -66,6 +66,16 @@ jobs:
           set -euo pipefail
           git merge-base --is-ancestor "$GITHUB_SHA" origin/develop || { echo "::error::tag commit is not reachable from develop"; exit 1; }
 
+      - name: Release tag must be annotated and point at the built commit
+        if: github.event_name == 'push' || !inputs.dry-run
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          tag="spinx-v$VERSION"
+          [ "$(git cat-file -t "refs/tags/$tag")" = tag ] || { echo "::error::$tag must be an annotated tag"; exit 1; }
+          [ "$(git rev-parse "refs/tags/$tag^{commit}")" = "$GITHUB_SHA" ] || { echo "::error::$tag does not point at the built commit $GITHUB_SHA"; exit 1; }
+
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
@@ -93,6 +103,17 @@ jobs:
         env:
           VERSION: ${{ steps.version.outputs.version }}
         run: node scripts/spinx-release/make-artifact.mjs --tree "$RUNNER_TEMP/tree" --out "$RUNNER_TEMP/out" --version "$VERSION" --source-sha "$GITHUB_SHA"
+
+      - name: Reproducibility gate - an independent second build must hash identically
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          ARTIFACT: ${{ steps.version.outputs.artifact }}
+        run: |
+          set -euo pipefail
+          node scripts/spinx-release/build-release-tree.mjs --repo . --out "$RUNNER_TEMP/tree2" --version "$VERSION"
+          node scripts/spinx-release/make-artifact.mjs --tree "$RUNNER_TEMP/tree2" --out "$RUNNER_TEMP/out2" --version "$VERSION" --source-sha "$GITHUB_SHA"
+          a="$(sha256sum "$RUNNER_TEMP/out/$ARTIFACT" | cut -d' ' -f1)"; b="$(sha256sum "$RUNNER_TEMP/out2/$ARTIFACT" | cut -d' ' -f1)"
+          [ "$a" = "$b" ] || { echo "::error::second build differs ($a vs $b)"; exit 1; }
 
       - name: Smoke - install into a throwaway prefix and run the leaf-helper probe
         env:

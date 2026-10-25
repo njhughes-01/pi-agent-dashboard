@@ -16,8 +16,12 @@ import { fileURLToPath } from "node:url";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const layout = JSON.parse(fs.readFileSync(path.join(HERE, "layout-manifest.json"), "utf8"));
-const SECRET_CONTENT = [/-----BEGIN (?:RSA |OPENSSH |EC |DSA )?PRIVATE KEY-----/, /\bgh[pousr]_[A-Za-z0-9]{36,}\b/, /\bsk-ant-[A-Za-z0-9_-]{20,}/, /\bAKIA[0-9A-Z]{16}\b/];
-const NM_FORBIDDEN = new Set(["auth.json", ".credentials.json", ".npmrc"]);
+/** Token shapes scanned everywhere, including node_modules (no false positives in a real tree). */
+const TOKEN_CONTENT = [/\bgh[pousr]_[A-Za-z0-9]{36,}\b/, /\bsk-ant-[A-Za-z0-9_-]{20,}/];
+/** Also scanned outside node_modules; third-party docs/test fixtures there legitimately contain these shapes. */
+const OWN_CONTENT = [/-----BEGIN (?:RSA |OPENSSH |EC |DSA )?PRIVATE KEY-----/, /\bAKIA[0-9A-Z]{16}\b/];
+/** Larger files are binaries (native toolchains); content scanning would only slow the build. */
+const MAX_SCAN_BYTES = 50_000_000;
 
 function parseArgs(argv) {
   const a = {};
@@ -42,15 +46,16 @@ function audit(tree) {
     if (e.isSymbolicLink()) {
       if (!/(^|\/)node_modules\/(?:.*\/)?\.bin\//.test(rel)) throw new Error(`symlink outside node_modules/.bin: ${rel}`);
       const target = fs.readlinkSync(p);
-      if (path.isAbsolute(target) || !path.resolve(path.dirname(p), target).startsWith(tree)) throw new Error(`symlink escapes the tree: ${rel}`);
+      const inside = path.relative(tree, path.resolve(path.dirname(p), target));
+      if (path.isAbsolute(target) || inside === ".." || inside.startsWith(`..${path.sep}`)) throw new Error(`symlink escapes the tree: ${rel}`);
       digest.update(`L ${rel} ${target}\0`);
     } else if (e.isFile()) {
       const base = e.name;
-      if (inNm ? NM_FORBIDDEN.has(base) : layout.forbiddenNames.includes(base)) throw new Error(`forbidden file in tree: ${rel}`);
+      if (layout.forbiddenNames.includes(base)) throw new Error(`forbidden file in tree: ${rel}`);
       const buf = fs.readFileSync(p);
-      if (!inNm && buf.length < 2_000_000) {
+      if (buf.length <= MAX_SCAN_BYTES) {
         const text = buf.toString("latin1");
-        for (const re of SECRET_CONTENT) if (re.test(text)) throw new Error(`credential-shaped content in ${rel}`);
+        for (const re of inNm ? TOKEN_CONTENT : [...TOKEN_CONTENT, ...OWN_CONTENT]) if (re.test(text)) throw new Error(`credential-shaped content in ${rel}`);
       }
       digest.update(`F ${rel} ${createHash("sha256").update(buf).digest("hex")}\0`);
     }

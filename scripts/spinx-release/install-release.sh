@@ -4,9 +4,10 @@
 #   install-release.sh --artifact <tar.gz> --sums <SHA256SUMS> --manifest <manifest.json> [--dry-run] [--no-restart]
 #
 # Verify -> stage next to the live dir -> validate -> backup -> stop unit ->
-# two same-filesystem renames -> start unit -> health. Any failure after the
-# first rename restores the previous directory. Writes only $SPINX_GLOBAL_DIR
-# and $SPINX_BACKUP_DIR; never auth, settings, config or the unit file.
+# two same-filesystem renames -> start unit -> health -> state record. Any
+# failure or interruption after the service was stopped restores the previous
+# directory and restarts the service. Writes only $SPINX_GLOBAL_DIR and
+# $SPINX_BACKUP_DIR; never auth, settings, config or the unit file.
 # See change: fork-release-and-local-install.
 set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -25,6 +26,7 @@ while [ $# -gt 0 ]; do
   esac
 done
 [ -f "$ARTIFACT" ] && [ -f "$SUMS" ] && [ -f "$MANIFEST" ] || die "--artifact, --sums and --manifest must be existing files"
+acquire_lock
 
 mf() { node -p "String(require('$MANIFEST')['$1'])"; }
 VERSION="$(mf version)"; TARBALL="$(mf tarball)"; NODE_MAJOR="$(mf nodeMajor)"; PLATFORM="$(mf platform)"
@@ -48,12 +50,13 @@ fi
 CUR="$SPINX_GLOBAL_DIR/$PKG_NAME"; NEXT="$SPINX_GLOBAL_DIR/.$PKG_NAME.next-$VERSION"
 [ -d "$CUR" ] || die "no current install at $CUR"
 [ ! -e "$NEXT" ] || die "$NEXT already exists (remove it after checking it is stale)"
-OLDVER="$(pkg_version "$CUR")"; TS="$(date -u +%Y%m%dT%H%M%SZ)"
+OLDVER="$(pkg_version "$CUR")"; TS="$(date -u +%Y%m%dT%H%M%SZ)-$$"
 ROLLBACK="$SPINX_GLOBAL_DIR/.$PKG_NAME.rollback-$OLDVER-$TS"
 
 # 3. stage + validate in the next dir (service untouched)
 mkdir "$NEXT"
 trap 'rm -rf "$NEXT"' EXIT
+trap 'exit 130' INT TERM HUP
 tar -xzf "$ARTIFACT" -C "$NEXT" --strip-components=1 --no-same-owner
 while IFS= read -r f; do
   [ -f "$NEXT/$f" ] && [ ! -L "$NEXT/$f" ] || die "staged tree lacks required file $f"
@@ -66,29 +69,28 @@ if [ "$DRY" = 1 ]; then
 fi
 
 # 4. backup (second restore route) + pre-install tree hash
-mkdir -p "$SPINX_BACKUP_DIR"
 BACKUP="$SPINX_BACKUP_DIR/$PKG_NAME-$OLDVER-$TS.tar.gz"
 tar -C "$SPINX_GLOBAL_DIR" -czf "$BACKUP" "$PKG_NAME"
 ( cd "$SPINX_BACKUP_DIR" && sha256sum "$(basename "$BACKUP")" > "$(basename "$BACKUP").sha256" )
 TREE_BEFORE="$(tree_hash "$CUR")"
 
-# 5. swap; once the first rename happened any failure restores the old dir
-SWAPPED=0
+# 5. swap; after the service stopped any failure/interruption restores the old state
+STOPPED=0 SWAPPED=0
 restore() {
   local rc=$?
   trap - EXIT ERR
+  log "FAILED (rc=$rc): restoring $OLDVER"
+  if [ "$RESTART" = 1 ] && [ "$STOPPED" = 1 ]; then unit stop || true; fi
   if [ "$SWAPPED" = 1 ]; then
-    log "FAILED (rc=$rc): restoring $OLDVER"
-    if [ "$RESTART" = 1 ]; then unit stop || true; fi
     if [ -d "$CUR" ]; then mv "$CUR" "$SPINX_GLOBAL_DIR/.$PKG_NAME.failed-$VERSION-$TS"; fi
     mv "$ROLLBACK" "$CUR"
-    if [ "$RESTART" = 1 ]; then unit start || true; fi
   fi
+  if [ "$RESTART" = 1 ] && [ "$STOPPED" = 1 ]; then unit start || true; fi
   rm -rf "$NEXT"
   exit "$rc"
 }
 trap restore EXIT ERR
-if [ "$RESTART" = 1 ]; then unit stop; fi
+if [ "$RESTART" = 1 ]; then unit stop; STOPPED=1; fi
 mv "$CUR" "$ROLLBACK"; SWAPPED=1
 if [ "${SPINX_TEST_FAIL_AFTER_FIRST_RENAME:-0}" = 1 ]; then die "simulated failure after first rename"; fi
 mv "$NEXT" "$CUR"
@@ -96,12 +98,12 @@ if [ "$RESTART" = 1 ]; then
   unit start
   wait_healthy || die "health check failed within ${SPINX_HEALTH_TIMEOUT}s"
 fi
-trap - EXIT ERR
-SWAPPED=0
-
+# the record is written atomically while recovery is still armed
 node -e '
 const fs = require("fs");
 const [file, oldVersion, newVersion, rollbackDir, backup, treeHashBefore, at] = process.argv.slice(1);
-fs.writeFileSync(file, JSON.stringify({ oldVersion, newVersion, rollbackDir, backup, treeHashBefore, at }, null, 2) + "\n");
+fs.writeFileSync(`${file}.tmp`, JSON.stringify({ oldVersion, newVersion, rollbackDir, backup, treeHashBefore, at }, null, 2) + "\n");
+fs.renameSync(`${file}.tmp`, file);
 ' "$SPINX_BACKUP_DIR/last-install.json" "$OLDVER" "$VERSION" "$ROLLBACK" "$BACKUP" "$TREE_BEFORE" "$TS"
+trap - EXIT ERR
 log "installed $VERSION; previous $OLDVER kept at $ROLLBACK (backup $BACKUP)"

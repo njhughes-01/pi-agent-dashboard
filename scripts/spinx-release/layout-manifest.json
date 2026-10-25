@@ -13,6 +13,7 @@
   },
   "requiredFiles": [
     "package.json",
+    "node_modules/@blackbelt-technology/pi-dashboard-web/dist/index.html",
     "packages/server/bin/pi-dashboard.mjs",
     "packages/server/package.json",
     "packages/extension/package.json",
@@ -23,5 +24,12 @@
     "packages/gmail-plugin/src/bridge/index.ts",
     "packages/flows-anthropic-bridge-plugin/src/bridge/index.ts"
   ],
-  "forbiddenNames": [".env", "auth.json", ".credentials.json", "id_rsa", "id_ed25519", ".npmrc"]
+  "forbiddenNames": [
+    ".env",
+    "auth.json",
+    ".credentials.json",
+    "id_rsa",
+    "id_ed25519",
+    ".npmrc"
+  ]
 }

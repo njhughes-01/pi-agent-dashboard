@@ -144,6 +144,45 @@ describe("install-release.sh", () => {
     expect(leftovers(e)).toEqual([]);
   });
 
+  it("restores the old tree when writing the install record fails", () => {
+    setHealthy(true);
+    const e = env();
+    const before = treeHash(e.cur);
+    fs.mkdirSync(path.join(e.backup, "last-install.json.tmp"), { recursive: true });
+    const r = install(e);
+    expect(r.status).not.toBe(0);
+    expect(treeHash(e.cur)).toBe(before);
+    expect(callLog(e).at(-1)).toBe("--user start pi-dashboard.service");
+  });
+
+  it("restarts the old service when the first rename cannot happen", () => {
+    setHealthy(true);
+    const e = env();
+    const before = treeHash(e.cur);
+    fs.chmodSync(e.globalDir, 0o555); // renames inside it now fail
+    const r = install(e);
+    fs.chmodSync(e.globalDir, 0o755);
+    expect(r.status).not.toBe(0);
+    expect(treeHash(e.cur)).toBe(before);
+  });
+
+  it("refuses to run while another install/rollback holds the lock", () => {
+    setHealthy(true);
+    const e = env();
+    fs.mkdirSync(e.backup, { recursive: true });
+    const holder = spawn("bash", ["-c", `exec 9>"${path.join(e.backup, ".lock")}"; flock 9; echo held; sleep 20`], { stdio: ["ignore", "pipe", "inherit"] });
+    return new Promise((resolve) => {
+      holder.stdout.once("data", () => {
+        const r = install(e);
+        holder.kill();
+        expect(r.status).not.toBe(0);
+        expect(r.stderr).toContain("another install/rollback is running");
+        expect(callLog(e)).toEqual([]);
+        resolve();
+      });
+    });
+  });
+
   it("never writes outside the global dir and the backup dir", () => {
     setHealthy(true);
     const e = env();
@@ -163,6 +202,20 @@ describe("rollback-release.sh", () => {
     expect(r.status, r.stderr).toBe(0);
     expect(treeHash(e.cur)).toBe(before);
     expect(ver(e.cur)).toBe(OLD);
+  });
+
+  it("keeps the active install when the rollback cannot complete", () => {
+    setHealthy(true);
+    const e = env();
+    expect(install(e).status).toBe(0);
+    const installed = treeHash(e.cur);
+    const state = JSON.parse(fs.readFileSync(path.join(e.backup, "last-install.json"), "utf8"));
+    fs.chmodSync(e.globalDir, 0o555);
+    const r = rollback(e);
+    fs.chmodSync(e.globalDir, 0o755);
+    expect(r.status).not.toBe(0);
+    expect(treeHash(e.cur)).toBe(installed);
+    expect(fs.existsSync(state.rollbackDir)).toBe(true);
   });
 
   it("refuses when there is no install record", () => {
