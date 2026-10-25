@@ -9,7 +9,28 @@
     "flows-plugin": "@blackbelt-technology/pi-dashboard-flows-plugin",
     "goal-plugin": "@blackbelt-technology/pi-dashboard-goal-plugin",
     "gmail-plugin": "@blackbelt-technology/pi-dashboard-gmail-plugin",
-    "flows-anthropic-bridge-plugin": "@blackbelt-technology/pi-dashboard-flows-anthropic-bridge-plugin"
+    "flows-anthropic-bridge-plugin": "@blackbelt-technology/pi-dashboard-flows-anthropic-bridge-plugin",
+    "apple-tools": "@blackbelt-technology/pi-dashboard-apple-tools",
+    "blackhole-plugin": "@blackbelt-technology/pi-dashboard-blackhole-plugin",
+    "browser-plugin": "@blackbelt-technology/pi-dashboard-browser-plugin",
+    "chat-gateway": "@blackbelt-technology/pi-dashboard-chat-gateway-plugin",
+    "context-mode-settings-plugin": "@blackbelt-technology/pi-dashboard-context-mode-settings-plugin",
+    "cost-estimator": "@blackbelt-technology/pi-dashboard-cost-estimator",
+    "craft-web-plugin": "@blackbelt-technology/pi-dashboard-craft-web-plugin",
+    "grammar-plugin": "@blackbelt-technology/pi-dashboard-grammar-plugin",
+    "hermes-memory-plugin": "@blackbelt-technology/pi-dashboard-hermes-memory-plugin",
+    "kb-plugin": "@blackbelt-technology/pi-dashboard-kb-plugin",
+    "keycloak-resolver-plugin": "@blackbelt-technology/pi-dashboard-keycloak-resolver-plugin",
+    "mcp-client-plugin": "@blackbelt-technology/pi-dashboard-mcp-client-plugin",
+    "mcp-server-plugin": "@blackbelt-technology/pi-dashboard-mcp-server-plugin",
+    "obs-studio-plugin": "@blackbelt-technology/pi-dashboard-obs-studio-plugin",
+    "quota-plugin": "@blackbelt-technology/pi-dashboard-quota-plugin",
+    "roles-plugin": "@blackbelt-technology/pi-dashboard-roles-plugin",
+    "skill-atlas-plugin": "@blackbelt-technology/pi-dashboard-skill-atlas-plugin",
+    "subagents-plugin": "@blackbelt-technology/pi-dashboard-subagents-plugin",
+    "system-one-plugin": "@blackbelt-technology/pi-dashboard-system-one-plugin",
+    "team-plugin": "@blackbelt-technology/pi-dashboard-team-plugin",
+    "web-access-plugin": "@blackbelt-technology/pi-dashboard-web-access-plugin"
   },
   "requiredFiles": [
     "package.json",
@@ -22,7 +43,9 @@
     "packages/flows-plugin/src/bridge/index.ts",
     "packages/goal-plugin/src/bridge/index.ts",
     "packages/gmail-plugin/src/bridge/index.ts",
-    "packages/flows-anthropic-bridge-plugin/src/bridge/index.ts"
+    "packages/flows-anthropic-bridge-plugin/src/bridge/index.ts",
+    "packages/mcp-server-plugin/src/server/index.ts",
+    "packages/roles-plugin/package.json"
   ],
   "forbiddenNames": [
     ".env",
