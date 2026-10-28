@@ -550,6 +550,7 @@
         "src/server/index.ts",
         "src/bridge/index.ts",
         "src/server/ooxml-validator.mjs",
+        "src/server/fixtures/fakecraft/fakecraft.js",
         "src/shim/craft-shim.js",
         "**/vitest.config.ts",
         "**/__tests__/**/*.test.{ts,tsx}"
@@ -641,6 +642,20 @@
       "entry": [
         "**/vitest.config.ts",
         "**/__tests__/**/*.test.{ts,tsx}"
+      ]
+    },
+    "packages/blender": {
+      "entry": [
+        "src/bin/blender.ts",
+        "src/host/host.ts",
+        "src/host/worker-boot.cjs",
+        "src/__tests__/helpers/socket-guard.cjs",
+        "scripts/*.mjs",
+        "**/vitest.config.ts",
+        "**/__tests__/**/*.test.{ts,tsx}"
+      ],
+      "project": [
+        "src/**/*.{ts,tsx,mjs,cjs}"
       ]
     },
     "packages/craft-apps": {
@@ -735,6 +750,7 @@
       "entry": [
         "bin/pi-dashboard.mjs",
         "src/cli.ts",
+        "src/lib/grep-worker.ts",
         "**/vitest.config.ts",
         "**/__tests__/**/*.test.{ts,tsx}"
       ],

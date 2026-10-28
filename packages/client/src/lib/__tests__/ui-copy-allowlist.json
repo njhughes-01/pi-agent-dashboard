@@ -240,6 +240,11 @@
       "file": "packages/shared/src/platform/detached-spawn.ts",
       "text": "spawn failed: no PID",
       "reason": "internal: OS child-process failure detail (node spawn), wrapped by a user-facing message upstream"
+    },
+    {
+      "file": "packages/server/src/session/session-api.ts",
+      "text": "excludeTools and name are not supported for ACP agent spawns",
+      "reason": "internal: developer-facing API 400 validation body on ACP spawn incompatibility (fork WO-A); not dashboard UI copy"
     }
   ]
 }
