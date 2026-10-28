@@ -62,6 +62,24 @@ describe("make-artifact", () => {
     expect(m.requiredFiles).toEqual(manifest.requiredFiles);
   });
 
+  it("--node-major overrides the layout target; a missing or invalid value fails and writes nothing", () => {
+    const run = (extra) => {
+      const out = tmp();
+      const r = spawnSync("node", [SCRIPT, "--tree", fakeTree(), "--out", out, "--version", VERSION, "--source-sha", "abc123", ...extra], { encoding: "utf8" });
+      return { r, out, files: fs.existsSync(out) ? fs.readdirSync(out) : [] };
+    };
+    const ok = run(["--node-major", "22"]);
+    expect(ok.r.status, ok.r.stderr).toBe(0);
+    expect(JSON.parse(fs.readFileSync(path.join(ok.out, "manifest.json"), "utf8")).nodeMajor).toBe(22);
+    expect(ok.files).toContain(`spinx-pi-dashboard-${VERSION}-linux-x64-node22.tar.gz`);
+    for (const extra of [["--node-major"], ["--node-major", ""], ["--node-major", "0"], ["--node-major", "22.1"], ["--node-major", "x"]]) {
+      const bad = run(extra);
+      expect(bad.r.status, extra.join(" ")).not.toBe(0);
+      expect(bad.r.stderr).toContain("--node-major");
+      expect(bad.files).toEqual([]);
+    }
+  });
+
   it("is reproducible: same tree, different mtimes, identical tarball hash", () => {
     const parent = fakeTree();
     const a = tmp();

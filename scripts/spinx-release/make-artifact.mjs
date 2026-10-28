@@ -85,7 +85,8 @@ async function main() {
   for (const f of layout.requiredFiles) if (!fs.lstatSync(path.join(tree, f), { throwIfNoEntry: false })?.isFile()) throw new Error(`required file missing: ${f}`);
   const treeDigest = audit(tree);
   // --node-major overrides the layout's target (tests build for the runner's own Node).
-  const nodeMajor = a["node-major"] === undefined ? layout.nodeMajor : Number(a["node-major"]);
+  const given = Object.hasOwn(a, "node-major");
+  const nodeMajor = given ? (/^[1-9][0-9]*$/.test(a["node-major"] ?? "") ? Number(a["node-major"]) : NaN) : layout.nodeMajor;
   if (!Number.isInteger(nodeMajor) || nodeMajor <= 0) throw new Error(`--node-major must be a positive integer, got ${a["node-major"]}`);
   const name = `spinx-pi-dashboard-${a.version}-${layout.platform}-node${nodeMajor}.tar.gz`;
   const out = path.resolve(a.out);
