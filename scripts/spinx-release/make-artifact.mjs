@@ -84,14 +84,17 @@ async function main() {
   const tree = path.join(parent, layout.topDir);
   for (const f of layout.requiredFiles) if (!fs.lstatSync(path.join(tree, f), { throwIfNoEntry: false })?.isFile()) throw new Error(`required file missing: ${f}`);
   const treeDigest = audit(tree);
-  const name = `spinx-pi-dashboard-${a.version}-${layout.platform}-node${layout.nodeMajor}.tar.gz`;
+  // --node-major overrides the layout's target (tests build for the runner's own Node).
+  const nodeMajor = a["node-major"] === undefined ? layout.nodeMajor : Number(a["node-major"]);
+  if (!Number.isInteger(nodeMajor) || nodeMajor <= 0) throw new Error(`--node-major must be a positive integer, got ${a["node-major"]}`);
+  const name = `spinx-pi-dashboard-${a.version}-${layout.platform}-node${nodeMajor}.tar.gz`;
   const out = path.resolve(a.out);
   fs.mkdirSync(out, { recursive: true });
   const tmpTar = path.join(out, `.${name}.partial`);
   try {
     await tarGz(parent, tmpTar);
     const sha = createHash("sha256").update(fs.readFileSync(tmpTar)).digest("hex");
-    const manifest = { name: "spinx-pi-dashboard", version: a.version, sourceSha: a["source-sha"], platform: layout.platform, nodeMajor: layout.nodeMajor, tarball: name, topDir: layout.topDir, requiredFiles: layout.requiredFiles, treeDigest };
+    const manifest = { name: "spinx-pi-dashboard", version: a.version, sourceSha: a["source-sha"], platform: layout.platform, nodeMajor, tarball: name, topDir: layout.topDir, requiredFiles: layout.requiredFiles, treeDigest };
     const manifestText = `${JSON.stringify(manifest, null, 2)}\n`;
     fs.writeFileSync(path.join(out, "manifest.json"), manifestText);
     fs.renameSync(tmpTar, path.join(out, name));

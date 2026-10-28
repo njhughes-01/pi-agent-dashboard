@@ -78,6 +78,13 @@ function packAll(copy, tarDir) {
   for (const p of listPackageJsons(copy)) {
     const j = JSON.parse(fs.readFileSync(p, "utf8"));
     if (j.private) continue;
+    // npm 10 (CI's Node 22) runs `prepare` when packing a directory even with
+    // --ignore-scripts; npm 11 skips it. This is a temp copy, so drop it here and
+    // every npm version packs the same way (an installed tree never runs prepare).
+    if (j.scripts?.prepare) {
+      delete j.scripts.prepare;
+      fs.writeFileSync(p, `${JSON.stringify(j, null, 2)}\n`);
+    }
     const lines = run("npm", ["pack", "--ignore-scripts", "--pack-destination", tarDir], { cwd: path.dirname(p) }).trim().split("\n");
     packed[j.name] = path.join(tarDir, lines[lines.length - 1].trim());
   }

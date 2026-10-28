@@ -45,7 +45,11 @@ function write(file, content) {
   fs.writeFileSync(file, content);
 }
 
-function env() {
+// Build test artifacts for the runner's own Node so the installer's node-major
+// guard passes on any CI tier; the guard itself is covered by its own test below.
+const RUNNER_MAJOR = process.versions.node.split(".")[0];
+
+function env(nodeMajor = RUNNER_MAJOR) {
   const root = tmp();
   const globalDir = path.join(root, "global");
   const backup = path.join(root, "backup");
@@ -63,7 +67,7 @@ function env() {
   const tree = path.join(treeParent, layout.topDir);
   for (const f of layout.requiredFiles) write(path.join(tree, f), f === "package.json" ? JSON.stringify({ version: NEW }) : `// ${f}\n`);
   const art = path.join(root, "art");
-  const r = spawnSync("node", [path.join(DIR, "make-artifact.mjs"), "--tree", treeParent, "--out", art, "--version", NEW, "--source-sha", "deadbeef"], { encoding: "utf8" });
+  const r = spawnSync("node", [path.join(DIR, "make-artifact.mjs"), "--tree", treeParent, "--out", art, "--version", NEW, "--source-sha", "deadbeef", "--node-major", String(nodeMajor)], { encoding: "utf8" });
   if (r.status !== 0) throw new Error(r.stderr);
   const base = {
     ...process.env,
@@ -86,6 +90,17 @@ const callLog = (e) => (fs.existsSync(e.calls) ? fs.readFileSync(e.calls, "utf8"
 const leftovers = (e) => fs.readdirSync(e.globalDir).filter((n) => n.startsWith(".pi-agent-dashboard.next-"));
 
 describe("install-release.sh", () => {
+  it("refuses an artifact built for another node major and changes nothing", () => {
+    setHealthy(true);
+    const e = env(Number(RUNNER_MAJOR) + 1);
+    const before = treeHash(e.cur);
+    const r = install(e);
+    expect(r.status).not.toBe(0);
+    expect(r.stderr).toContain("node major must be");
+    expect(treeHash(e.cur)).toBe(before);
+    expect(callLog(e)).toEqual([]);
+  });
+
   it("installs, keeps the old tree as the rollback dir and records state", () => {
     setHealthy(true);
     const e = env();
