@@ -1,13 +1,22 @@
 # Tasks — sync-upstream-0-11-0
 
 - [x] 1 Refs verified before coding: `fork/develop` = `7d6504f0b`, tag `v0.11.0` = `6bdb9184472a41eb8ab5a7cdfda101c3cd531787`, merge-base = `db03c6b91`; no fetches -> verify: `git rev-parse` + `git merge-base` output matches, logged under `.hq-scratch/`.
-- [ ] 2 Topic branch `feat/sync-upstream-0-11-0` from `fork/develop`; this change committed on it -> verify: `git merge-base fork/develop HEAD` = `7d6504f0b`.
-- [ ] 3 Merge the exact tag: `git merge v0.11.0` (no conflicts expected; if any, stop and report) -> verify: merge commit parents = fork tip + tag commit; `git diff ecb35b999` empty (tree equals the reference clean merge).
-- [ ] 4 Invariant source markers present post-merge (5 invariants) -> verify: `git grep` finds `excludeTools` + `name` spawn handling, `steer|followUp` prompt mode, ACP 400 rejection, `apiMiss`/`mcpMiss`/`isNavigation` in `replyIfApiNotFound`, `scripts/spinx-release/` files and `spinx-release.yml`.
-- [ ] 5 Version + lockfile alignment: root and every `packages/*/package.json` = `0.11.0`; `pnpm-lock.yaml` importers at `0.11.0`; no `-spinx` stamp in source -> verify: grep counts + `pnpm install --frozen-lockfile` clean.
-- [ ] 6 Upstream OpenSpec artifacts preserved -> verify: merge diff vs tag keeps `openspec/specs/*` from upstream (`git diff v0.11.0 -- openspec/specs` shows only fork-local additions); upstream change dirs from v0.11.0 present.
-- [ ] 7 Targeted fork tests green post-merge -> verify: vitest on `session-api-prompt-mode`, `session-api-spawn-capability-scope`, `spa-fallback`, `spawn-mechanism`, and all `scripts/__tests__/spinx-release-*.test.mjs` (non-publishing, temp-prefix only), log under `.hq-scratch/`.
-- [ ] 8 OpenSpec validate -> verify: `openspec validate sync-upstream-0-11-0 --strict` passes; `node scripts/check-conventions.mjs --base fork/develop` no new violations.
+- [x] 2 Topic branch `feat/sync-upstream-0-11-0` from `fork/develop`; this change committed on it -> verify: `git merge-base fork/develop HEAD` = `7d6504f0b`.
+- [x] 3 Merge the exact tag: `git merge v0.11.0` (no conflicts expected; if any, stop and report) -> verify: merge commit parents = fork tip + tag commit; `git diff ecb35b999` empty (tree equals the reference clean merge).
+- [x] 4 Invariant source markers present post-merge (5 invariants) -> verify: `git grep` finds `excludeTools` + `name` spawn handling, `steer|followUp` prompt mode, ACP 400 rejection, `apiMiss`/`mcpMiss`/`isNavigation` in `replyIfApiNotFound`, `scripts/spinx-release/` files and `spinx-release.yml`.
+- [x] 5 Version + lockfile alignment: root and every `packages/*/package.json` = `0.11.0`; `pnpm-lock.yaml` importers at `0.11.0`; no `-spinx` stamp in source -> verify: grep counts + `pnpm install --frozen-lockfile` clean.
+- [x] 6 Upstream OpenSpec artifacts preserved -> verify: merge diff vs tag keeps `openspec/specs/*` from upstream (`git diff v0.11.0 -- openspec/specs` shows only fork-local additions); upstream change dirs from v0.11.0 present.
+- [x] 7 Targeted fork tests green post-merge -> verify: vitest on `session-api-prompt-mode`, `session-api-spawn-capability-scope`, `spa-fallback`, `spawn-mechanism`, and all `scripts/__tests__/spinx-release-*.test.mjs` (non-publishing, temp-prefix only), log under `.hq-scratch/`.
+- [x] 8 OpenSpec validate -> verify: `openspec validate sync-upstream-0-11-0 --strict` passes; `node scripts/check-conventions.mjs --base fork/develop` no new violations.
 - [ ] 9 Full test suite -> verify: `npm test` (vitest, pipefail + tee to `.hq-scratch/test.log`); failures triaged against upstream's own v0.11.0 baseline before touching anything.
+  - TRIAGE (run 1, `.hq-scratch/test.log`): 10 failed / 46,984 passed. Classified:
+    - automation-watcher, spinx-release-tree("source unchanged"): pass serially — parallel cross-test interference (`prompt-bus.ts` mutated by a concurrent test while git-status snapshotted).
+    - claude-plugin-zip: host missing `zip` binary (`spawnSync zip ENOENT`); installed `zip 3.0` via apt (test dep of a NEW upstream v0.11.0 leg); green serially.
+    - ui-copy-no-spawn: PRE-EXISTING fork drift — f54f5c70f added the ACP-400 string on develop without a `ui-copy-allowlist.json` entry (test, allowlist and `session-api.ts` blobs byte-identical fork/develop vs HEAD). Fixed with one allowlist entry (repo's own mechanism); string unchanged; green serially.
+    - openspec-change-watcher-fs x2: host Node v24.21 `fs.watch(recursive:true)` no longer throws on a missing dir (one-liner repro `.hq-scratch/`); test+impl blobs identical base/develop/HEAD; CI pins Node 22.
+    - managed-runtime-strategy, node-electron-resolution (PATH-lookup cases): impl + test blobs identical base/develop/HEAD; host-environment failure (host Node 24 vs CI Node 22).
+    - hermes-config E2: `skipIf` local-checkout probe — this host has a local pi-hermes-memory@0.9.11 vs fixture 0.9.10; plugin src blob identical; fails on develop too.
+    - spawn-correlation-performance: RSS-threshold perf flake (37MB vs 10MB cap); impl+test blobs identical.
+  - None merge-caused (all contributing blobs byte-identical fork/develop vs HEAD; fork develop Nightly CI 40476335975 was already red pre-merge).
 - [ ] 10 Independent code review of the merge (Pi on `openai/gpt-6.1-sol`, read-only) against this change -> verify: reviewer confirms parents, invariants, versions, no publish/install/restart steps; result logged under `.hq-scratch/`.
 - [ ] 11 No-merge/no-release attestation -> verify: final report states: PR not merged, no tags created, nothing installed/restarted, `fork/develop` still at `7d6504f0b`.

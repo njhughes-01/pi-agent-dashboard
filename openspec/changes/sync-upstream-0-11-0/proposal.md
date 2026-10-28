@@ -15,6 +15,7 @@ The Spinx fork (`fork/develop`, 0.10.0 + WO-A/fork-release fixes) has drifted fr
   5. Fork release/install tooling under `scripts/spinx-release/` + `.github/workflows/spinx-release.yml` + `docs/fork-release.md`.
 - Upstream OpenSpec artifacts (`openspec/changes/*`, `openspec/specs/*`) arrive intact from the merge.
 - Source versions become plain `0.11.0` (upstream's own bump `2a67deff9`); the artifact convention `<base>-spinx.<N>` / `spinx-v<base>-spinx.<N>` (e.g. `0.11.0-spinx.1`) is untouched and applied only in the CI copy, never in source.
+- One follow-on allowlist entry (`ui-copy-allowlist.json`): the ACP-400 error string added on develop by `f54f5c70f` lacks its exact (file, text) exemption, so `ui-copy-no-spawn.test.ts` already fails on `fork/develop`; the entry (not the string) is added here so the copy lint is green. Verified pre-existing via byte-identical test/allowlist/source blobs.
 - No production changes: nothing is merged to `develop`, tagged, published, installed, or restarted by this change.
 
 ## Discipline Skills
