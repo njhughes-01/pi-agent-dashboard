@@ -6,7 +6,7 @@
 
 ## D2 Overlap surface
 
-Fork touched 27 files since base; upstream touched ~188. Overlap by path: `packages/server/src/server.ts` and `docs/AGENTS.md`. The fork's `replyIfApiNotFound` block and upstream's server.ts changes are in different regions; the pre-existing trial merge `ecb35b999` (same two parents) recorded an empty combined diff, i.e. git auto-merged with zero conflict resolutions. Our merge must reproduce `ecb35b999`'s tree exactly (`git diff ecb35b999` empty) — any deviation is a red flag to stop and report.
+Fork touched 27 files since base; upstream touched ~188. Overlap by path: `packages/server/src/server.ts` and `docs/AGENTS.md`. The fork's `replyIfApiNotFound` block and upstream's server.ts changes are in different regions; the pre-existing trial merge `ecb35b999` (same two parents) recorded an empty combined diff, i.e. git auto-merged with zero conflict resolutions. Our MERGE commit's tree must equal `ecb35b999`'s apart from this change's own OpenSpec folder (`git diff ecb35b999 eabb54191 -- . ':(exclude)openspec/changes/sync-upstream-0-11-0'` empty) — any other deviation is a red flag to stop and report.
 
 ## D3 Invariant preservation = merge correctness
 
@@ -18,4 +18,4 @@ Upstream's release commit `2a67deff9` bumps all `packages/*/package.json` to `0.
 
 ## D5 Reference-merge cross-check
 
-`ecb35b999` (on `feat/sync-upstream-v0.11.0`, a separate worktree we do not touch) is treated as a read-only oracle: same parents, clean merge. Our merge commit's tree must equal its tree.
+`ecb35b999` (on `feat/sync-upstream-v0.11.0`, a separate worktree we do not touch) is treated as a read-only oracle: same parents, clean merge. Our merge commit `eabb54191`'s tree equals its tree, apart from this change's own `openspec/changes/sync-upstream-0-11-0/` folder (verified with an `:(exclude)` pathspec diff — empty). Follow-on commits on the branch (OpenSpec updates + one allowlist entry) are verified separately via `git diff eabb54191 HEAD --stat`.
